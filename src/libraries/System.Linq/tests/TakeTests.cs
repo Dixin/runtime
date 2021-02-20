@@ -27,7 +27,7 @@ namespace System.Linq.Tests
         public void SameResultsRepeatCallsIntQueryIList()
         {
             var q = (from x in new[] { 9999, 0, 888, -1, 66, -777, 1, 2, -12345 }
-                     where x > Int32.MinValue
+                     where x > int.MinValue
                      select x).ToList();
 
             Assert.Equal(q.Take(9), q.Take(9));
@@ -56,8 +56,8 @@ namespace System.Linq.Tests
         [Fact]
         public void SameResultsRepeatCallsStringQueryIList()
         {
-            var q = (from x in new[] { "!@#$%^", "C", "AAA", "", "Calling Twice", "SoS", String.Empty }
-                     where !String.IsNullOrEmpty(x)
+            var q = (from x in new[] { "!@#$%^", "C", "AAA", "", "Calling Twice", "SoS", string.Empty }
+                     where !string.IsNullOrEmpty(x)
                      select x).ToList();
 
             Assert.Equal(q.Take(7), q.Take(7));
@@ -1294,8 +1294,7 @@ namespace System.Linq.Tests
         [InlineData(2, 3)]
         public void DisposeSource(int sourceCount, int count)
         {
-            bool[] isIteratorDisposed = new bool[5];
-
+            bool[] isSourceDisposed = new bool[5];
             var source = Repeat(
                 index =>
                 {
@@ -1303,29 +1302,31 @@ namespace System.Linq.Tests
                     return new DelegateIterator<int>(
                         moveNext: () => ++state <= sourceCount,
                         current: () => 0,
-                        dispose: () => { state = -1; isIteratorDisposed[index] = true; });
+                        dispose: () => { state = -1; isSourceDisposed[index] = true; });
                 },
                 5);
+
+            // For result = source.Take(...),
+            // If result is not empty, when result is enumerated, source is enumerated, and source enumerator will be disposed.
+            // If result is empty, it is an empty array not related to source. When result is enumerated, source is not enumerated, and source enumerator will not be disposed.
 
             IEnumerator<int> iterator0 = source[0].Take(count).GetEnumerator();
             int iteratorCount0 = Math.Min(sourceCount, Math.Max(0, count));
             Assert.All(Enumerable.Range(0, iteratorCount0), _ => Assert.True(iterator0.MoveNext()));
-
             Assert.False(iterator0.MoveNext());
-
             // Unlike Skip, Take can tell straightaway that it can return a sequence with no elements if count <= 0.
             // The enumerable it returns is a specialized empty iterator that has no connections to the source. Hence,
             // after MoveNext returns false under those circumstances, it won't invoke Dispose on our enumerator.
-            bool isItertorNotEmpty0 = count > 0;
-            Assert.Equal(isItertorNotEmpty0, isIteratorDisposed[0]);
+            bool isResultNotEmpty0 = count > 0;
+            Assert.Equal(isResultNotEmpty0, isSourceDisposed[0]);
 
             int end = Math.Max(0, count);
             IEnumerator<int> iterator1 = source[1].Take(0..end).GetEnumerator();
             Assert.All(Enumerable.Range(0, Math.Min(sourceCount, Math.Max(0, count))), _ => Assert.True(iterator1.MoveNext()));
             Assert.False(iterator1.MoveNext());
             // When startIndex end and endIndex are both not from end and startIndex >= endIndex, Take(Range) returns an empty array.
-            bool isItertorNotEmpty1 = end != 0;
-            Assert.Equal(isItertorNotEmpty1, isIteratorDisposed[1]);
+            bool isResultNotEmpty1 = end != 0;
+            Assert.Equal(isResultNotEmpty1, isSourceDisposed[1]);
 
             int startIndexFromEnd = Math.Max(sourceCount, end);
             int endIndexFromEnd = Math.Max(0, sourceCount - end);
@@ -1334,21 +1335,21 @@ namespace System.Linq.Tests
             Assert.All(Enumerable.Range(0, Math.Min(sourceCount, Math.Max(0, count))), _ => Assert.True(iterator2.MoveNext()));
             Assert.False(iterator2.MoveNext());
             // When startIndex is ^0, Take(Range) returns an empty array.
-            bool isItertorNotEmpty2 = startIndexFromEnd != 0;
-            Assert.Equal(isItertorNotEmpty2, isIteratorDisposed[2]);
+            bool isResultNotEmpty2 = startIndexFromEnd != 0;
+            Assert.Equal(isResultNotEmpty2, isSourceDisposed[2]);
 
             IEnumerator<int> iterator3 = source[3].Take(0..^endIndexFromEnd).GetEnumerator();
             Assert.All(Enumerable.Range(0, Math.Min(sourceCount, Math.Max(0, count))), _ => Assert.True(iterator3.MoveNext()));
             Assert.False(iterator3.MoveNext());
-            Assert.True(isIteratorDisposed[3]);
+            Assert.True(isSourceDisposed[3]);
 
             IEnumerator<int> iterator4 = source[4].Take(^startIndexFromEnd..^endIndexFromEnd).GetEnumerator();
             Assert.All(Enumerable.Range(0, Math.Min(sourceCount, Math.Max(0, count))), _ => Assert.True(iterator4.MoveNext()));
             Assert.False(iterator4.MoveNext());
             // When startIndex is ^0,
             // or when startIndex and endIndex are both from end and startIndex <= endIndexFromEnd, Take(Range) returns an empty array.
-            bool isItertorNotEmpty4 = startIndexFromEnd != 0 && startIndexFromEnd > endIndexFromEnd;
-            Assert.Equal(isItertorNotEmpty4, isIteratorDisposed[4]);
+            bool isResultNotEmpty4 = startIndexFromEnd != 0 && startIndexFromEnd > endIndexFromEnd;
+            Assert.Equal(isResultNotEmpty4, isSourceDisposed[4]);
         }
 
         [Fact]

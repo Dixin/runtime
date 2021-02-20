@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace System.Linq
@@ -38,53 +37,40 @@ namespace System.Linq
 
             public int GetCount(bool onlyIfCheap) => _count;
 
-            public IPartition<TResult> Skip(int count)
-            {
-                Debug.Assert(count > 0);
+            public IPartition<TResult> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) =>
+                this.Take(
+                    startIndexInclusive,
+                    endIndexExclusive,
+                    isStartIndexFromEnd,
+                    isEndIndexFromEnd,
+                    (normalizedStartIndexInclusive, normalizedEndIndexExclusive) => new RepeatIterator<TResult>(_current, normalizedEndIndexExclusive - normalizedStartIndexInclusive));
 
-                if (count >= _count)
-                {
-                    return EmptyPartition<TResult>.Instance;
-                }
+            //public TResult? TryGetElementAt(int index, out bool found)
+            //{
+            //    if ((uint)index < (uint)_count)
+            //    {
+            //        found = true;
+            //        return _current;
+            //    }
 
-                return new RepeatIterator<TResult>(_current, _count - count);
-            }
+            //    found = false;
+            //    return default;
+            //}
 
-            public IPartition<TResult> Take(int count)
-            {
-                Debug.Assert(count > 0);
+            public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TResult element) =>
+                this.TryGetElementAt(index, isIndexFromEnd, _ => _current, out element);
 
-                if (count >= _count)
-                {
-                    return this;
-                }
+            //public TResult TryGetFirst(out bool found)
+            //{
+            //    found = true;
+            //    return _current;
+            //}
 
-                return new RepeatIterator<TResult>(_current, count);
-            }
-
-            public TResult? TryGetElementAt(int index, out bool found)
-            {
-                if ((uint)index < (uint)_count)
-                {
-                    found = true;
-                    return _current;
-                }
-
-                found = false;
-                return default;
-            }
-
-            public TResult TryGetFirst(out bool found)
-            {
-                found = true;
-                return _current;
-            }
-
-            public TResult TryGetLast(out bool found)
-            {
-                found = true;
-                return _current;
-            }
+            //public TResult TryGetLast(out bool found)
+            //{
+            //    found = true;
+            //    return _current;
+            //}
         }
     }
 }

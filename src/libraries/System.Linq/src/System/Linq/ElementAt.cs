@@ -16,25 +16,17 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
             }
 
-            if (source is IPartition<TSource> partition)
-            {
-                TSource? element = partition.TryGetElementAt(index, out bool found);
-                if (found)
-                {
-                    return element!;
-                }
-            }
-            else if (source is IList<TSource> list)
+            if (source is IList<TSource> list)
             {
                 return list[index];
             }
-            else if (TryGetElement(source, index, out TSource? element))
+
+            if (!TryGetElement(source, index, out TSource? element))
             {
-                return element;
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.index);
             }
 
-            ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.index);
-            return default;
+            return element;
         }
 
         /// <summary>Returns the element at a specified index in a sequence.</summary>
@@ -77,11 +69,6 @@ namespace System.Linq
             if (source == null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
-
-            if (source is IPartition<TSource> partition)
-            {
-                return partition.TryGetElementAt(index, out bool _);
             }
 
             if (source is IList<TSource> list)
@@ -129,6 +116,11 @@ namespace System.Linq
         {
             Debug.Assert(source != null);
 
+            if (source is IPartition<TSource> partition)
+            {
+                return partition.TryGetElementAt(index, isIndexFromEnd: false, out element);
+            }
+
             if (index >= 0)
             {
                 using IEnumerator<TSource> e = source.GetEnumerator();
@@ -151,6 +143,11 @@ namespace System.Linq
         private static bool TryGetElementFromEnd<TSource>(IEnumerable<TSource> source, int indexFromEnd, [MaybeNullWhen(false)] out TSource element)
         {
             Debug.Assert(source != null);
+
+            if (source is IPartition<TSource> partition)
+            {
+                return partition.TryGetElementAt(indexFromEnd, isIndexFromEnd: true, out element);
+            }
 
             if (indexFromEnd > 0)
             {

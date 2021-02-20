@@ -50,27 +50,31 @@ namespace System.Linq
             // Do nothing.
         }
 
-        public IPartition<TElement> Skip(int count) => this;
+        public IPartition<TElement> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) => this;
 
-        public IPartition<TElement> Take(int count) => this;
+        //public TElement? TryGetElementAt(int index, out bool found)
+        //{
+        //    found = false;
+        //    return default;
+        //}
 
-        public TElement? TryGetElementAt(int index, out bool found)
+        public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TElement element)
         {
-            found = false;
-            return default;
+            element = default;
+            return false;
         }
 
-        public TElement? TryGetFirst(out bool found)
-        {
-            found = false;
-            return default;
-        }
+        //public TElement? TryGetFirst(out bool found)
+        //{
+        //    found = false;
+        //    return default;
+        //}
 
-        public TElement? TryGetLast(out bool found)
-        {
-            found = false;
-            return default;
-        }
+        //public TElement? TryGetLast(out bool found)
+        //{
+        //    found = false;
+        //    return default;
+        //}
 
         public TElement[] ToArray() => Array.Empty<TElement>();
 
@@ -84,17 +88,23 @@ namespace System.Linq
         private readonly OrderedEnumerable<TElement> _source;
         private readonly int _minIndexInclusive;
         private readonly int _maxIndexInclusive;
+        private readonly bool _isMinIndexFromEnd;
+        private readonly bool _isMaxIndexFromEnd;
 
-        public OrderedPartition(OrderedEnumerable<TElement> source, int minIdxInclusive, int maxIdxInclusive)
+        public OrderedPartition(OrderedEnumerable<TElement> source, int minIndexInclusive, int maxIndexInclusive, bool isMinIndexFromEnd = false, bool isMaxIndexFromEnd = false)
         {
             _source = source;
-            _minIndexInclusive = minIdxInclusive;
-            _maxIndexInclusive = maxIdxInclusive;
+            _minIndexInclusive = minIndexInclusive;
+            _maxIndexInclusive = maxIndexInclusive;
+            _isMinIndexFromEnd = isMinIndexFromEnd;
+            _isMaxIndexFromEnd = isMaxIndexFromEnd;
         }
 
         public IEnumerator<TElement> GetEnumerator() => _source.GetEnumerator(_minIndexInclusive, _maxIndexInclusive);
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public IPartition<TElement> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) => throw new NotImplementedException();
 
         public IPartition<TElement> Skip(int count)
         {
@@ -113,18 +123,21 @@ namespace System.Linq
             return new OrderedPartition<TElement>(_source, _minIndexInclusive, maxIndex);
         }
 
-        public TElement? TryGetElementAt(int index, out bool found)
-        {
-            if (unchecked((uint)index <= (uint)(_maxIndexInclusive - _minIndexInclusive)))
-            {
-                return _source.TryGetElementAt(index + _minIndexInclusive, out found);
-            }
+        //public TElement? TryGetElementAt(int index, out bool found)
+        //{
+        //    if (unchecked((uint)index <= (uint)(_maxIndexInclusive - _minIndexInclusive)))
+        //    {
+        //        return _source.TryGetElementAt(index + _minIndexInclusive, out found);
+        //    }
 
-            found = false;
-            return default;
-        }
+        //    found = false;
+        //    return default;
+        //}
 
-        public TElement? TryGetFirst(out bool found) => _source.TryGetElementAt(_minIndexInclusive, out found);
+        public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TElement element) =>
+            _source.TryGetElementAt(index, isIndexFromEnd, out element);
+
+        //public TElement? TryGetFirst(out bool found) => _source.TryGetElementAt(_minIndexInclusive, out found);
 
         public TElement? TryGetLast(out bool found) =>
             _source.TryGetLast(_minIndexInclusive, _maxIndexInclusive, out found);
@@ -136,6 +149,155 @@ namespace System.Linq
         public int GetCount(bool onlyIfCheap) => _source.GetCount(_minIndexInclusive, _maxIndexInclusive, onlyIfCheap);
     }
 
+    internal static class Partition
+    {
+        internal static (int NormalizedStartIndexInclusive, int NormalizedEndIndexExclusive, bool IsEmpty) Normalize(int count, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd)
+        {
+            Debug.Assert(count >= 0);
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+
+            if (isStartIndexFromEnd)
+            {
+                startIndexInclusive = count - startIndexInclusive;
+            }
+
+            if (isEndIndexFromEnd)
+            {
+                endIndexExclusive = count - endIndexExclusive;
+            }
+
+            if (startIndexInclusive < 0)
+            {
+                startIndexInclusive = 0;
+            }
+
+            if (endIndexExclusive > count)
+            {
+                endIndexExclusive = count;
+            }
+
+            return (startIndexInclusive, endIndexExclusive, startIndexInclusive >= count || endIndexExclusive <= 0 || startIndexInclusive >= endIndexExclusive);
+        }
+
+        internal static (int NormalizedIndex, bool IsOutOfRange) Normalize(int count, int index, bool isIndexFromEnd)
+        {
+            Debug.Assert(count >= 0);
+            Debug.Assert(index >= 0);
+
+            if (isIndexFromEnd)
+            {
+                index = count - index;
+                if (index < 0)
+                {
+                    return (0, true);
+                }
+            }
+
+            return index < count ? (index, false) : (count, true);
+        }
+
+        internal static bool IsEmpty(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd)
+        {
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+
+            return IsEmpty((uint)startIndexInclusive, (uint)endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
+        }
+
+        internal static bool IsEmpty(uint startIndexInclusive, uint endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) =>
+            isStartIndexFromEnd
+                ? startIndexInclusive == 0 || (isEndIndexFromEnd && startIndexInclusive <= endIndexExclusive)
+                : !isEndIndexFromEnd && (endIndexExclusive == 0 || startIndexInclusive >= endIndexExclusive);
+
+        internal static IPartition<TSource> ToPartition<TSource>(this IList<TSource> source, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd = false, bool isEndIndexFromEnd = false)
+        {
+            Debug.Assert(source != null);
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+
+            (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Normalize(source.Count, startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
+            return isEmpty
+                ? EmptyPartition<TSource>.Instance
+                : new Enumerable.ListPartition<TSource>(source, normalizedStartIndexInclusive, normalizedEndIndexExclusive - 1);
+        }
+
+        internal static IPartition<TSource> ToPartition<TSource>(this IEnumerable<TSource> source, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd = false, bool isEndIndexFromEnd = false)
+        {
+            Debug.Assert(source != null);
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+
+            return IsEmpty(startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd)
+                ? EmptyPartition<TSource>.Instance
+                : new Enumerable.EnumerablePartition<TSource>(source, startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
+        }
+
+        internal static IPartition<TSource> ToPartition<TSource>(this OrderedEnumerable<TSource> source, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd = false, bool isEndIndexFromEnd = false)
+        {
+            Debug.Assert(source != null);
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+
+            return IsEmpty(startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd)
+                ? EmptyPartition<TSource>.Instance
+                : new OrderedPartition<TSource>(source, startIndexInclusive, endIndexExclusive - 1, isStartIndexFromEnd, isEndIndexFromEnd);
+        }
+
+        internal static IPartition<TElement> Take<TElement>(
+            this IPartition<TElement> partition, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd, Func<int, int, IPartition<TElement>> factory)
+        {
+            Debug.Assert(partition != null);
+            Debug.Assert(startIndexInclusive >= 0);
+            Debug.Assert(endIndexExclusive >= 0);
+            Debug.Assert(factory != null);
+
+            int count = partition.GetCount(onlyIfCheap: true);
+            Debug.Assert(count >= 0);
+            (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Normalize(count, startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
+
+            if (isEmpty)
+            {
+                return EmptyPartition<TElement>.Instance;
+            }
+
+            if (startIndexInclusive == 0 && endIndexExclusive == count)
+            {
+                return partition;
+            }
+
+            return factory(normalizedStartIndexInclusive, normalizedEndIndexExclusive);
+        }
+
+        public static bool TryGetElementAt<TSource>(this IPartition<TSource> partition, int index, bool isIndexFromEnd, Func<int, TSource> factory, [MaybeNullWhen(false)] out TSource element)
+        {
+            element = default;
+            if (index < 0)
+            {
+                return false;
+            }
+
+            int count = partition.GetCount(onlyIfCheap: true);
+            Debug.Assert(count >= 0);
+            if (isIndexFromEnd)
+            {
+                index = count - index;
+                if (index < 0)
+                {
+                    return false;
+                }
+            }
+
+            if (index >= count)
+            {
+                return false;
+            }
+
+            element = factory(index);
+            return true;
+        }
+    }
+
     public static partial class Enumerable
     {
         /// <summary>
@@ -143,20 +305,20 @@ namespace System.Linq
         /// </summary>
         /// <typeparam name="TSource">The type of the source list.</typeparam>
         [DebuggerDisplay("Count = {Count}")]
-        private sealed class ListPartition<TSource> : Iterator<TSource>, IPartition<TSource>
+        internal sealed class ListPartition<TSource> : Iterator<TSource>, IPartition<TSource>
         {
             private readonly IList<TSource> _source;
             private readonly int _minIndexInclusive;
             private readonly int _maxIndexInclusive;
 
-            public ListPartition(IList<TSource> source, int minIndexInclusive, int maxIndexInclusive)
+            public ListPartition(IList<TSource> source, int minIndexInclusive, int maxIndexInclusive, bool isMinIndexFromEnd = false, bool isMaxIndexFromEnd = false)
             {
                 Debug.Assert(source != null);
                 Debug.Assert(minIndexInclusive >= 0);
                 Debug.Assert(minIndexInclusive <= maxIndexInclusive);
                 _source = source;
-                _minIndexInclusive = minIndexInclusive;
-                _maxIndexInclusive = maxIndexInclusive;
+                _minIndexInclusive = isMinIndexFromEnd ? source.Count - minIndexInclusive : minIndexInclusive;
+                _maxIndexInclusive = isMaxIndexFromEnd ? source.Count - maxIndexInclusive : maxIndexInclusive;
             }
 
             public override Iterator<TSource> Clone() =>
@@ -182,54 +344,53 @@ namespace System.Linq
             public override IEnumerable<TResult> Select<TResult>(Func<TSource, TResult> selector) =>
                 new SelectListPartitionIterator<TSource, TResult>(_source, selector, _minIndexInclusive, _maxIndexInclusive);
 
-            public IPartition<TSource> Skip(int count)
-            {
-                int minIndex = _minIndexInclusive + count;
-                return (uint)minIndex > (uint)_maxIndexInclusive ? EmptyPartition<TSource>.Instance : new ListPartition<TSource>(_source, minIndex, _maxIndexInclusive);
-            }
+            public IPartition<TSource> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) =>
+                this.Take(
+                    startIndexInclusive,
+                    endIndexExclusive,
+                    isStartIndexFromEnd,
+                    isEndIndexFromEnd,
+                    (normalizedStartIndexInclusive, normalizedEndIndexExclusive) => new ListPartition<TSource>(_source, _minIndexInclusive + normalizedStartIndexInclusive, _minIndexInclusive + normalizedEndIndexExclusive - 1));
 
-            public IPartition<TSource> Take(int count)
-            {
-                int maxIndex = unchecked(_minIndexInclusive + count - 1);
-                return unchecked((uint)maxIndex >= (uint)_maxIndexInclusive) ? this : new ListPartition<TSource>(_source, _minIndexInclusive, maxIndex);
-            }
+            //public TSource? TryGetElementAt(int index, out bool found)
+            //{
+            //    if (unchecked((uint)index <= (uint)(_maxIndexInclusive - _minIndexInclusive) && index < _source.Count - _minIndexInclusive))
+            //    {
+            //        found = true;
+            //        return _source[_minIndexInclusive + index];
+            //    }
 
-            public TSource? TryGetElementAt(int index, out bool found)
-            {
-                if (unchecked((uint)index <= (uint)(_maxIndexInclusive - _minIndexInclusive) && index < _source.Count - _minIndexInclusive))
-                {
-                    found = true;
-                    return _source[_minIndexInclusive + index];
-                }
+            //    found = false;
+            //    return default;
+            //}
 
-                found = false;
-                return default;
-            }
+            public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TSource element) =>
+                this.TryGetElementAt(index, isIndexFromEnd, normalizedIndex => _source[_minIndexInclusive + normalizedIndex], out element);
 
-            public TSource? TryGetFirst(out bool found)
-            {
-                if (_source.Count > _minIndexInclusive)
-                {
-                    found = true;
-                    return _source[_minIndexInclusive];
-                }
+            //public TSource? TryGetFirst(out bool found)
+            //{
+            //    if (_source.Count > _minIndexInclusive)
+            //    {
+            //        found = true;
+            //        return _source[_minIndexInclusive];
+            //    }
 
-                found = false;
-                return default;
-            }
+            //    found = false;
+            //    return default;
+            //}
 
-            public TSource? TryGetLast(out bool found)
-            {
-                int lastIndex = _source.Count - 1;
-                if (lastIndex >= _minIndexInclusive)
-                {
-                    found = true;
-                    return _source[Math.Min(lastIndex, _maxIndexInclusive)];
-                }
+            //public TSource? TryGetLast(out bool found)
+            //{
+            //    int lastIndex = _source.Count - 1;
+            //    if (lastIndex >= _minIndexInclusive)
+            //    {
+            //        found = true;
+            //        return _source[Math.Min(lastIndex, _maxIndexInclusive)];
+            //    }
 
-                found = false;
-                return default;
-            }
+            //    found = false;
+            //    return default;
+            //}
 
             private int Count
             {
@@ -287,39 +448,44 @@ namespace System.Linq
         /// An iterator that yields the items of part of an <see cref="IEnumerable{TSource}"/>.
         /// </summary>
         /// <typeparam name="TSource">The type of the source enumerable.</typeparam>
-        private sealed class EnumerablePartition<TSource> : Iterator<TSource>, IPartition<TSource>
+        internal sealed class EnumerablePartition<TSource> : Iterator<TSource>, IPartition<TSource>
         {
             private readonly IEnumerable<TSource> _source;
-            private readonly int _minIndexInclusive;
-            private readonly int _maxIndexInclusive; // -1 if we want everything past _minIndexInclusive.
+            private readonly int _startIndexInclusive;
+            private readonly int _endIndexExclusive; // -1 if we want everything past _minIndexInclusive.
                                                      // If this is -1, it's impossible to set a limit on the count.
+
+            private readonly bool _isStartIndexFromEnd;
+            private readonly bool _isEndIndexFromEnd;
             private IEnumerator<TSource>? _enumerator;
 
-            internal EnumerablePartition(IEnumerable<TSource> source, int minIndexInclusive, int maxIndexInclusive)
+            internal EnumerablePartition(IEnumerable<TSource> source, int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd = false, bool isEndIndexFromEnd = false)
             {
                 Debug.Assert(source != null);
                 Debug.Assert(!(source is IList<TSource>), $"The caller needs to check for {nameof(IList<TSource>)}.");
-                Debug.Assert(minIndexInclusive >= 0);
-                Debug.Assert(maxIndexInclusive >= -1);
-                // Note that although maxIndexInclusive can't grow, it can still be int.MaxValue.
-                // We support partitioning enumerables with > 2B elements. For example, e.Skip(1).Take(int.MaxValue) should work.
-                // But if it is int.MaxValue, then minIndexInclusive must != 0. Otherwise, our count may overflow.
-                Debug.Assert(maxIndexInclusive == -1 || (maxIndexInclusive - minIndexInclusive < int.MaxValue), $"{nameof(Limit)} will overflow!");
-                Debug.Assert(maxIndexInclusive == -1 || minIndexInclusive <= maxIndexInclusive);
+                Debug.Assert(startIndexInclusive >= 0);
+                Debug.Assert(endIndexExclusive >= 0);
+
+                // if (!isMinIndexFromEnd && !isMaxIndexFromEnd), then (minIndexInclusive < maxIndexExclusive).
+                Debug.Assert(isStartIndexFromEnd || isEndIndexFromEnd || startIndexInclusive < endIndexExclusive);
+                // if (isMinIndexFromEnd && isMaxIndexFromEnd), then (minIndexInclusive > maxIndexExclusive).
+                Debug.Assert(!isStartIndexFromEnd || !isEndIndexFromEnd || startIndexInclusive > endIndexExclusive);
 
                 _source = source;
-                _minIndexInclusive = minIndexInclusive;
-                _maxIndexInclusive = maxIndexInclusive;
+                _startIndexInclusive = startIndexInclusive;
+                _endIndexExclusive = endIndexExclusive;
+                _isStartIndexFromEnd = isStartIndexFromEnd;
+                _isEndIndexFromEnd = isEndIndexFromEnd;
             }
 
             // If this is true (e.g. at least one Take call was made), then we have an upper bound
             // on how many elements we can have.
-            private bool HasLimit => _maxIndexInclusive != -1;
+            private bool IsNormalized => !_isStartIndexFromEnd && !_isEndIndexFromEnd;
 
-            private int Limit => unchecked((_maxIndexInclusive + 1) - _minIndexInclusive); // This is that upper bound.
+            private int NormalizedCount => _endIndexExclusive - _startIndexInclusive; // This is that upper bound.
 
             public override Iterator<TSource> Clone() =>
-                new EnumerablePartition<TSource>(_source, _minIndexInclusive, _maxIndexInclusive);
+                new EnumerablePartition<TSource>(_source, _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
 
             public override void Dispose()
             {
@@ -339,29 +505,22 @@ namespace System.Linq
                     return -1;
                 }
 
-                if (!HasLimit)
+                if (_source.TryGetNonEnumeratedCount(out int sourceCount))
                 {
-                    // If HasLimit is false, we contain everything past _minIndexInclusive.
-                    // Therefore, we have to iterate the whole enumerable.
-                    return Math.Max(_source.Count() - _minIndexInclusive, 0);
+                    (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Partition.Normalize(sourceCount, _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    return isEmpty ? 0 : normalizedEndIndexExclusive - normalizedStartIndexInclusive;
                 }
 
-                using (IEnumerator<TSource> en = _source.GetEnumerator())
+                if (!IsNormalized)
                 {
-                    // We only want to iterate up to _maxIndexInclusive + 1.
-                    // Past that, we know the enumerable will be able to fit this partition,
-                    // so the count will just be _maxIndexInclusive + 1 - _minIndexInclusive.
-
-                    // Note that it is possible for _maxIndexInclusive to be int.MaxValue here,
-                    // so + 1 may result in signed integer overflow. We need to handle this.
-                    // At the same time, however, we are guaranteed that our max count can fit
-                    // in an int because if that is true, then _minIndexInclusive must > 0.
-
-                    uint count = SkipAndCount((uint)_maxIndexInclusive + 1, en);
-                    Debug.Assert(count != (uint)int.MaxValue + 1 || _minIndexInclusive > 0, "Our return value will be incorrect.");
-                    return Math.Max((int)count - _minIndexInclusive, 0);
+                    // If HasNormalizedLimit is false, we have to iterate the whole enumerable.
+                    (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Partition.Normalize(_source.Count(), _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    return isEmpty ? 0 : normalizedEndIndexExclusive - normalizedStartIndexInclusive;
                 }
 
+                using IEnumerator<TSource> e = _source.GetEnumerator();
+                int actualEndIndexExclusive = Skip(e, _endIndexExclusive);
+                return Math.Max(actualEndIndexExclusive - _startIndexInclusive, 0);
             }
 
             public override bool MoveNext()
@@ -393,9 +552,9 @@ namespace System.Linq
                         goto default;
                     default:
                         Debug.Assert(_enumerator != null);
-                        if ((!HasLimit || taken < Limit) && _enumerator.MoveNext())
+                        if ((!IsNormalized || taken < NormalizedCount) && _enumerator.MoveNext())
                         {
-                            if (HasLimit)
+                            if (IsNormalized)
                             {
                                 // If we are taking an unknown number of elements, it's important not to increment _state.
                                 // _state - 3 may eventually end up overflowing & we'll hit the Dispose branch even though
@@ -416,194 +575,519 @@ namespace System.Linq
             public override IEnumerable<TResult> Select<TResult>(Func<TSource, TResult> selector) =>
                 new SelectIPartitionIterator<TSource, TResult>(this, selector);
 
-            public IPartition<TSource> Skip(int count)
+            public IPartition<TSource> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd)
             {
-                int minIndex = unchecked(_minIndexInclusive + count);
+                Debug.Assert(startIndexInclusive >= 0);
+                Debug.Assert(endIndexExclusive >= 0);
 
-                if (!HasLimit)
+                if (Partition.IsEmpty(startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd))
                 {
-                    if (minIndex < 0)
-                    {
-                        // If we don't know our max count and minIndex can no longer fit in a positive int,
-                        // then we will need to wrap ourselves in another iterator.
-                        // This can happen, for example, during e.Skip(int.MaxValue).Skip(int.MaxValue).
-                        return new EnumerablePartition<TSource>(this, count, -1);
-                    }
-                }
-                else if ((uint)minIndex > (uint)_maxIndexInclusive)
-                {
-                    // If minIndex overflows and we have an upper bound, we will go down this branch.
-                    // We know our upper bound must be smaller than minIndex, since our upper bound fits in an int.
-                    // This branch should not be taken if we don't have a bound.
                     return EmptyPartition<TSource>.Instance;
                 }
 
-                Debug.Assert(minIndex >= 0, $"We should have taken care of all cases when {nameof(minIndex)} overflows.");
-                return new EnumerablePartition<TSource>(_source, minIndex, _maxIndexInclusive);
-            }
-
-            public IPartition<TSource> Take(int count)
-            {
-                int maxIndex = unchecked(_minIndexInclusive + count - 1);
-                if (!HasLimit)
+                uint? mergedStartIndexInclusive = null;
+                bool? isMergedStartIndexFromEnd = null; // TODO!!!
+                if (isStartIndexFromEnd)
                 {
-                    if (maxIndex < 0)
+                    if (_isStartIndexFromEnd && _isEndIndexFromEnd)
                     {
-                        // If we don't know our max count and maxIndex can no longer fit in a positive int,
-                        // then we will need to wrap ourselves in another iterator.
-                        // Note that although maxIndex may be too large, the difference between it and
-                        // _minIndexInclusive (which is count - 1) must fit in an int.
-                        // Example: e.Skip(50).Take(int.MaxValue).
-
-                        return new EnumerablePartition<TSource>(this, 0, count - 1);
+                        mergedStartIndexInclusive = Math.Min((uint)_startIndexInclusive, (uint)_endIndexExclusive + (uint)startIndexInclusive);
+                        isMergedStartIndexFromEnd = true;
+                    }
+                    else if (!_isStartIndexFromEnd && !_isEndIndexFromEnd)
+                    {
+                        mergedStartIndexInclusive = (uint)Math.Max(_startIndexInclusive, Math.Max(0, _endIndexExclusive - startIndexInclusive));
+                        isMergedStartIndexFromEnd = false;
                     }
                 }
-                else if (unchecked((uint)maxIndex >= (uint)_maxIndexInclusive))
+                else
                 {
-                    // If we don't know our max count, we can't go down this branch.
-                    // It's always possible for us to contain more than count items, as the rest
-                    // of the enumerable past _minIndexInclusive can be arbitrarily long.
-                    return this;
+                    if (_isStartIndexFromEnd)
+                    {
+                        mergedStartIndexInclusive = (uint)Math.Max(0, _startIndexInclusive - startIndexInclusive);
+                        isMergedStartIndexFromEnd = true;
+                    }
+                    else
+                    {
+                        mergedStartIndexInclusive = (uint)_startIndexInclusive + (uint)startIndexInclusive;
+                        isMergedStartIndexFromEnd = false;
+                    }
                 }
 
-                Debug.Assert(maxIndex >= 0, $"We should have taken care of all cases when {nameof(maxIndex)} overflows.");
-                return new EnumerablePartition<TSource>(_source, _minIndexInclusive, maxIndex);
+                Debug.Assert(!isMergedStartIndexFromEnd.HasValue || isMergedStartIndexFromEnd == _isStartIndexFromEnd);
+
+                uint? mergedEndIndexExclusive = null;
+                bool? isMergedEndIndexFrmEnd = null; // TODO!!!
+                if (isEndIndexFromEnd)
+                {
+                    if (_isEndIndexFromEnd)
+                    {
+                        mergedEndIndexExclusive = (uint)_endIndexExclusive + (uint)endIndexExclusive;
+                        isMergedEndIndexFrmEnd = true;
+                    }
+                    else
+                    {
+                        mergedEndIndexExclusive = (uint)Math.Max(0, _endIndexExclusive - endIndexExclusive);
+                        isMergedEndIndexFrmEnd = false;
+                    }
+                }
+                else
+                {
+                    if (_isStartIndexFromEnd && _isEndIndexFromEnd)
+                    {
+                        mergedEndIndexExclusive = (uint)Math.Max(_endIndexExclusive, Math.Max(0, _startIndexInclusive - startIndexInclusive));
+                        isMergedEndIndexFrmEnd = true;
+                    }
+                    else if (!_isStartIndexFromEnd && !_isEndIndexFromEnd)
+                    {
+                        mergedEndIndexExclusive = Math.Min((uint)_endIndexExclusive, (uint)_startIndexInclusive + (uint)startIndexInclusive);
+                        isMergedEndIndexFrmEnd = false;
+                    }
+                }
+
+                Debug.Assert(!isMergedEndIndexFrmEnd.HasValue || isMergedEndIndexFrmEnd == _isEndIndexFromEnd);
+
+                if (mergedStartIndexInclusive.HasValue && mergedEndIndexExclusive.HasValue)
+                {
+                    uint startInclusive = mergedStartIndexInclusive.Value;
+                    uint endExclusive = mergedEndIndexExclusive.Value;
+                    if (startInclusive == _startIndexInclusive && endExclusive == _endIndexExclusive)
+                    {
+                        return this;
+                    }
+
+                    if (Partition.IsEmpty(startInclusive, endExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd))
+                    {
+                        return EmptyPartition<TSource>.Instance;
+                    }
+
+                    if (startInclusive <= int.MaxValue && endExclusive <= int.MaxValue)
+                    {
+                        return new EnumerablePartition<TSource>(_source, (int)startInclusive, (int)endExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    }
+                }
+
+                return new EnumerablePartition<TSource>(this, startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
             }
 
-            public TSource? TryGetElementAt(int index, out bool found)
-            {
-                // If the index is negative or >= our max count, return early.
-                if (index >= 0 && (!HasLimit || index < Limit))
-                {
-                    using (IEnumerator<TSource> en = _source.GetEnumerator())
-                    {
-                        Debug.Assert(_minIndexInclusive + index >= 0, $"Adding {nameof(index)} caused {nameof(_minIndexInclusive)} to overflow.");
+            //public IPartition<TSource> Skip(int count)
+            //{
+            //    int minIndexInclusive = unchecked(_startIndexInclusive + count);
 
-                        if (SkipBefore(_minIndexInclusive + index, en) && en.MoveNext())
+            //    if (!HasNormalizedLimit)
+            //    {
+            //        if (minIndexInclusive < 0)
+            //        {
+            //            // If we don't know our max count and minIndex can no longer fit in a positive int,
+            //            // then we will need to wrap ourselves in another iterator.
+            //            // This can happen, for example, during e.Skip(int.MaxValue).Skip(int.MaxValue).
+            //            return new EnumerablePartition<TSource>(this, count, 0, false, false);
+            //        }
+            //    }
+            //    else if ((uint)minIndexInclusive >= (uint)_endIndexExclusive)
+            //    {
+            //        // If minIndex overflows and we have an upper bound, we will go down this branch.
+            //        // We know our upper bound must be smaller than minIndex, since our upper bound fits in an int.
+            //        // This branch should not be taken if we don't have a bound.
+            //        return EmptyPartition<TSource>.Instance;
+            //    }
+
+            //    Debug.Assert(minIndexInclusive >= 0, $"We should have taken care of all cases when {nameof(minIndexInclusive)} overflows.");
+            //    return new EnumerablePartition<TSource>(_source, minIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+            //}
+
+            //public IPartition<TSource> Take(int count)
+            //{
+            //    int maxIndexExclusive = unchecked(_startIndexInclusive + count);
+            //    if (!HasNormalizedLimit)
+            //    {
+            //        if (maxIndexExclusive <= 0)
+            //        {
+            //            // If we don't know our max count and maxIndex can no longer fit in a positive int,
+            //            // then we will need to wrap ourselves in another iterator.
+            //            // Note that although maxIndex may be too large, the difference between it and
+            //            // _minIndexInclusive (which is count - 1) must fit in an int.
+            //            // Example: e.Skip(50).Take(int.MaxValue).
+
+            //            return new EnumerablePartition<TSource>(this, 0, count, false, false);
+            //        }
+            //    }
+            //    else if (unchecked((uint)maxIndexExclusive >= (uint)_endIndexExclusive))
+            //    {
+            //        // If we don't know our max count, we can't go down this branch.
+            //        // It's always possible for us to contain more than count items, as the rest
+            //        // of the enumerable past _minIndexInclusive can be arbitrarily long.
+            //        return this;
+            //    }
+
+            //    Debug.Assert(maxIndexExclusive > 0, $"We should have taken care of all cases when {nameof(maxIndexExclusive)} overflows.");
+            //    return new EnumerablePartition<TSource>(_source, _startIndexInclusive, maxIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+            //}
+
+            //public TSource? TryGetElementAt(int index, out bool found)
+            //{
+            //    // If the index is negative or >= our max count, return early.
+            //    if (index >= 0 && (!IsNormalized || index < NormalizedCount))
+            //    {
+            //        using (IEnumerator<TSource> en = _source.GetEnumerator())
+            //        {
+            //            Debug.Assert(_startIndexInclusive + index >= 0, $"Adding {nameof(index)} caused {nameof(_startIndexInclusive)} to overflow.");
+
+            //            if (SkipFromStartBefore(_startIndexInclusive + index, en) && en.MoveNext())
+            //            {
+            //                found = true;
+            //                return en.Current;
+            //            }
+            //        }
+            //    }
+
+            //    found = false;
+            //    return default;
+            //}
+
+            public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TSource element)
+            {
+                element = default;
+                if (index < 0 || (index == 0 && isIndexFromEnd))
+                {
+                    return false;
+                }
+
+                if (_source.TryGetNonEnumeratedCount(out int sourceCount))
+                {
+                    (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Partition.Normalize(sourceCount, _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    if (isEmpty)
+                    {
+                        return false;
+                    }
+
+                    int count = normalizedEndIndexExclusive - normalizedStartIndexInclusive;
+                    (int normalizedIndex, bool isOutOfRange) = Partition.Normalize(count, index, isIndexFromEnd);
+                    return !isOutOfRange && TryGetElementFromStart(normalizedStartIndexInclusive + normalizedIndex, out element);
+                }
+
+                int mergedIndex;
+                if (isIndexFromEnd)
+                {
+                    if (_isEndIndexFromEnd)
+                    {
+                        mergedIndex = _endIndexExclusive + index;
+                        if (_isStartIndexFromEnd)
                         {
-                            found = true;
-                            return en.Current;
+                            if (mergedIndex >= _startIndexInclusive)
+                            {
+                                return false;
+                            }
+
+                            return TryGetElementFromEnd(mergedIndex, out element);
+                        }
+                        else
+                        {
+                            return TryGetElementFromEnd(mergedIndex, out element, normalizedIndex => normalizedIndex >= _startIndexInclusive);
+                        }
+                    }
+                    else
+                    {
+                        mergedIndex = _endIndexExclusive - index;
+                        if (mergedIndex < 0)
+                        {
+                            return false;
+                        }
+
+                        if (_isStartIndexFromEnd)
+                        {
+                            return TryGetElementFromStart(mergedIndex, out element, e => !SkipBefore(_startIndexInclusive, e));
+                        }
+                        else
+                        {
+                            if (mergedIndex < _startIndexInclusive)
+                            {
+                                return false;
+                            }
+
+                            return TryGetElementFromStart(mergedIndex, out element);
                         }
                     }
                 }
-
-                found = false;
-                return default;
-            }
-
-            public TSource? TryGetFirst(out bool found)
-            {
-                using (IEnumerator<TSource> en = _source.GetEnumerator())
+                else
                 {
-                    if (SkipBeforeFirst(en) && en.MoveNext())
+                    if (_isStartIndexFromEnd)
                     {
-                        found = true;
-                        return en.Current;
-                    }
-                }
-
-                found = false;
-                return default;
-            }
-
-            public TSource? TryGetLast(out bool found)
-            {
-                using (IEnumerator<TSource> en = _source.GetEnumerator())
-                {
-                    if (SkipBeforeFirst(en) && en.MoveNext())
-                    {
-                        int remaining = Limit - 1; // Max number of items left, not counting the current element.
-                        int comparand = HasLimit ? 0 : int.MinValue; // If we don't have an upper bound, have the comparison always return true.
-                        TSource result;
-
-                        do
+                        mergedIndex = _startIndexInclusive - index;
+                        if (mergedIndex < 0)
                         {
-                            remaining--;
-                            result = en.Current;
+                            return false;
                         }
-                        while (remaining >= comparand && en.MoveNext());
 
-                        found = true;
-                        return result;
+                        if (_isEndIndexFromEnd)
+                        {
+                            if (mergedIndex < _endIndexExclusive)
+                            {
+                                return false;
+                            }
+
+                            return TryGetElementFromEnd(mergedIndex, out element);
+                        }
+                        else
+                        {
+                            return TryGetElementFromEnd(mergedIndex, out element, normalizedIndex => normalizedIndex < _endIndexExclusive);
+                        }
+                    }
+                    else
+                    {
+                        mergedIndex = _startIndexInclusive + index;
+                        if (_isEndIndexFromEnd)
+                        {
+                            return TryGetElementFromStart(mergedIndex, out element, e => SkipBefore(_endIndexExclusive, e));
+                        }
+                        else
+                        {
+                            if (mergedIndex >= _endIndexExclusive)
+                            {
+                                return false;
+                            }
+
+                            return TryGetElementFromStart(mergedIndex, out element);
+                        }
+                    }
+                }
+            }
+
+            private bool TryGetElementFromStart(int index, [MaybeNullWhen(false)] out TSource element, Func<IEnumerator<TSource>, bool>? postCondition = null)
+            {
+                using IEnumerator<TSource> e = _source.GetEnumerator();
+                if (SkipBefore(index, e) && e.MoveNext())
+                {
+                    element = e.Current;
+                    if (postCondition is null || postCondition(e))
+                    {
+                        return true;
                     }
                 }
 
-                found = false;
-                return default;
+                element = default;
+                return false;
+            }
+
+            private bool TryGetElementFromEnd(int index, [MaybeNullWhen(false)] out TSource element, Func<int, bool>? postCondition = null)
+            {
+                using IEnumerator<TSource> e = _source.GetEnumerator();
+                if (e.MoveNext())
+                {
+                    int currentIndex = 1;
+                    Queue<TSource> queue = new();
+                    queue.Enqueue(e.Current);
+                    while (e.MoveNext())
+                    {
+                        checked
+                        {
+                            currentIndex++;
+                        }
+
+                        if (queue.Count == index)
+                        {
+                            queue.Dequeue();
+                        }
+
+                        queue.Enqueue(e.Current);
+                    }
+
+                    if (queue.Count == index && (postCondition is null || postCondition(checked(++currentIndex) - index)))
+                    {
+                        element = queue.Dequeue();
+                        return true;
+                    }
+                }
+
+                element = default;
+                return false;
+            }
+
+            //public TSource? TryGetFirst(out bool found)
+            //{
+            //    using (IEnumerator<TSource> en = _source.GetEnumerator())
+            //    {
+            //        if (SkipBeforeFirst(en) && en.MoveNext())
+            //        {
+            //            found = true;
+            //            return en.Current;
+            //        }
+            //    }
+
+            //    found = false;
+            //    return default;
+            //}
+
+            //public TSource? TryGetLast(out bool found)
+            //{
+            //    using (IEnumerator<TSource> en = _source.GetEnumerator())
+            //    {
+            //        if (SkipBeforeFirst(en) && en.MoveNext())
+            //        {
+            //            int remaining = Limit - 1; // Max number of items left, not counting the current element.
+            //            int comparand = HasLimit ? 0 : int.MinValue; // If we don't have an upper bound, have the comparison always return true.
+            //            TSource result;
+
+            //            do
+            //            {
+            //                remaining--;
+            //                result = en.Current;
+            //            }
+            //            while (remaining >= comparand && en.MoveNext());
+
+            //            found = true;
+            //            return result;
+            //        }
+            //    }
+
+            //    found = false;
+            //    return default;
+            //}
+
+            public void GetElements(Action<TSource> elementCallback)
+            {
+                if (_source.TryGetNonEnumeratedCount(out int sourceCount))
+                {
+                    (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Partition.Normalize(sourceCount, _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    if (!isEmpty)
+                    {
+                        using IEnumerator<TSource> e = _source.GetEnumerator();
+                        int actualSkipCount = Skip(e, normalizedStartIndexInclusive);
+                        Debug.Assert(actualSkipCount == normalizedStartIndexInclusive);
+                        Take(e, normalizedEndIndexExclusive - normalizedStartIndexInclusive, elementCallback);
+                        return;
+                    }
+                }
+
+                if (_isStartIndexFromEnd)
+                {
+                    Queue<TSource> takeLastResult;
+                    (takeLastResult, sourceCount) = TakeLast(_source, _startIndexInclusive);
+                    (int normalizedStartIndexInclusive, int normalizedEndIndexExclusive, bool isEmpty) = Partition.Normalize(sourceCount, _startIndexInclusive, _endIndexExclusive, _isStartIndexFromEnd, _isEndIndexFromEnd);
+                    if (!isEmpty)
+                    {
+                        using IEnumerator<TSource> e = takeLastResult.GetEnumerator();
+                        Take(e, normalizedEndIndexExclusive - normalizedStartIndexInclusive, elementCallback);
+                    }
+                }
+                else
+                {
+                    if (_isEndIndexFromEnd)
+                    {
+                        using IEnumerator<TSource> e = _source.GetEnumerator();
+                        if (Skip(e, _startIndexInclusive) == _startIndexInclusive)
+                        {
+                            SkipLast(e, _endIndexExclusive, elementCallback);
+                        }
+                    }
+                    else
+                    {
+                        using IEnumerator<TSource> e = _source.GetEnumerator();
+                        if (Skip(e, _startIndexInclusive) == _startIndexInclusive)
+                        {
+                            Take(e, _endIndexExclusive - _startIndexInclusive, elementCallback);
+                        }
+                    }
+                }
             }
 
             public TSource[] ToArray()
             {
-                using (IEnumerator<TSource> en = _source.GetEnumerator())
-                {
-                    if (SkipBeforeFirst(en) && en.MoveNext())
-                    {
-                        int remaining = Limit - 1; // Max number of items left, not counting the current element.
-                        int comparand = HasLimit ? 0 : int.MinValue; // If we don't have an upper bound, have the comparison always return true.
-
-                        int maxCapacity = HasLimit ? Limit : int.MaxValue;
-                        var builder = new LargeArrayBuilder<TSource>(maxCapacity);
-
-                        do
-                        {
-                            remaining--;
-                            builder.Add(en.Current);
-                        }
-                        while (remaining >= comparand && en.MoveNext());
-
-                        return builder.ToArray();
-                    }
-                }
-
-                return Array.Empty<TSource>();
+                LargeArrayBuilder<TSource> arrayBuilder = new();
+                GetElements(arrayBuilder.Add);
+                return arrayBuilder.ToArray();
             }
 
             public List<TSource> ToList()
             {
-                var list = new List<TSource>();
-
-                using (IEnumerator<TSource> en = _source.GetEnumerator())
-                {
-                    if (SkipBeforeFirst(en) && en.MoveNext())
-                    {
-                        int remaining = Limit - 1; // Max number of items left, not counting the current element.
-                        int comparand = HasLimit ? 0 : int.MinValue; // If we don't have an upper bound, have the comparison always return true.
-
-                        do
-                        {
-                            remaining--;
-                            list.Add(en.Current);
-                        }
-                        while (remaining >= comparand && en.MoveNext());
-                    }
-                }
-
+                List<TSource> list = new();
+                GetElements(list.Add);
                 return list;
             }
 
-            private bool SkipBeforeFirst(IEnumerator<TSource> en) => SkipBefore(_minIndexInclusive, en);
+            private bool SkipBeforeFirst(IEnumerator<TSource> e) => SkipBefore(_startIndexInclusive, e);
 
-            private static bool SkipBefore(int index, IEnumerator<TSource> en) => SkipAndCount(index, en) == index;
+            private static bool SkipBefore(int indexExclusive, IEnumerator<TSource> en) => Skip(en, indexExclusive) == indexExclusive;
 
-            private static int SkipAndCount(int index, IEnumerator<TSource> en)
+            private static int Skip(IEnumerator<TSource> e, int count)
             {
-                Debug.Assert(index >= 0);
-                return (int)SkipAndCount((uint)index, en);
+                Debug.Assert(count >= 0);
+                return (int)Skip((uint)count, e);
             }
 
-            private static uint SkipAndCount(uint index, IEnumerator<TSource> en)
+            private static uint Skip(uint count, IEnumerator<TSource> e)
             {
-                Debug.Assert(en != null);
+                Debug.Assert(e != null);
 
-                for (uint i = 0; i < index; i++)
+                for (uint index = 0; index < count; index++)
                 {
-                    if (!en.MoveNext())
+                    if (!e.MoveNext())
                     {
-                        return i;
+                        return index;
                     }
                 }
 
-                return index;
+                return count;
+            }
+
+            private static void SkipLast(IEnumerator<TSource> e, int count, Action<TSource> elementCallback)
+            {
+                Debug.Assert(e != null);
+                Debug.Assert(count > 0);
+
+                Queue<TSource> queue = new();
+                while (e.MoveNext())
+                {
+                    if (queue.Count == count)
+                    {
+                        do
+                        {
+                            elementCallback(queue.Dequeue());
+                            queue.Enqueue(e.Current);
+                        } while (e.MoveNext());
+
+                        break;
+                    }
+
+                    queue.Enqueue(e.Current);
+                }
+            }
+
+            private static void Take(IEnumerator<TSource> e, int count, Action<TSource> elementCallback)
+            {
+                Debug.Assert(e != null);
+
+                for (int index = 0; index < count; index++)
+                {
+                    bool shouldMoveNext = e.MoveNext();
+                    Debug.Assert(shouldMoveNext);
+                    elementCallback(e.Current);
+                }
+            }
+
+            private static (Queue<TSource> Result, int TotalCount) TakeLast(IEnumerable<TSource> source, int count)
+            {
+                Debug.Assert(source != null);
+                Debug.Assert(count > 0);
+
+                int totalCount = 0;
+                Queue<TSource> queue = new();
+                using IEnumerator<TSource> e = source.GetEnumerator();
+                while (e.MoveNext())
+                {
+                    checked
+                    {
+                        totalCount++;
+                    }
+
+                    queue.Enqueue(e.Current);
+                    if (queue.Count > count)
+                    {
+                        queue.Dequeue();
+                    }
+                }
+
+                return (queue, totalCount);
             }
         }
     }

@@ -56,69 +56,69 @@ namespace System.Linq
             return !onlyIfCheap || _source is ICollection<TElement> || _source is ICollection ? _source.Count() : -1;
         }
 
-        internal TElement[] ToArray(int minIdx, int maxIdx)
+        internal TElement[] ToArray(int minIndexInclusive, int maxIndexInclusive)
         {
             Buffer<TElement> buffer = new Buffer<TElement>(_source);
             int count = buffer._count;
-            if (count <= minIdx)
+            if (count <= minIndexInclusive)
             {
                 return Array.Empty<TElement>();
             }
 
-            if (count <= maxIdx)
+            if (count <= maxIndexInclusive)
             {
-                maxIdx = count - 1;
+                maxIndexInclusive = count - 1;
             }
 
-            if (minIdx == maxIdx)
+            if (minIndexInclusive == maxIndexInclusive)
             {
-                return new TElement[] { GetEnumerableSorter().ElementAt(buffer._items, count, minIdx) };
+                return new TElement[] { GetEnumerableSorter().ElementAt(buffer._items, count, minIndexInclusive) };
             }
 
-            int[] map = SortedMap(buffer, minIdx, maxIdx);
-            TElement[] array = new TElement[maxIdx - minIdx + 1];
+            int[] map = SortedMap(buffer, minIndexInclusive, maxIndexInclusive);
+            TElement[] array = new TElement[maxIndexInclusive - minIndexInclusive + 1];
             int idx = 0;
-            while (minIdx <= maxIdx)
+            while (minIndexInclusive <= maxIndexInclusive)
             {
-                array[idx] = buffer._items[map[minIdx]];
+                array[idx] = buffer._items[map[minIndexInclusive]];
                 ++idx;
-                ++minIdx;
+                ++minIndexInclusive;
             }
 
             return array;
         }
 
-        internal List<TElement> ToList(int minIdx, int maxIdx)
+        internal List<TElement> ToList(int minIndexInclusive, int maxIndexInclusive)
         {
             Buffer<TElement> buffer = new Buffer<TElement>(_source);
             int count = buffer._count;
-            if (count <= minIdx)
+            if (count <= minIndexInclusive)
             {
                 return new List<TElement>();
             }
 
-            if (count <= maxIdx)
+            if (count <= maxIndexInclusive)
             {
-                maxIdx = count - 1;
+                maxIndexInclusive = count - 1;
             }
 
-            if (minIdx == maxIdx)
+            if (minIndexInclusive == maxIndexInclusive)
             {
-                return new List<TElement>(1) { GetEnumerableSorter().ElementAt(buffer._items, count, minIdx) };
+                return new List<TElement>(1) { GetEnumerableSorter().ElementAt(buffer._items, count, minIndexInclusive) };
             }
 
-            int[] map = SortedMap(buffer, minIdx, maxIdx);
-            List<TElement> list = new List<TElement>(maxIdx - minIdx + 1);
-            while (minIdx <= maxIdx)
+            int[] map = SortedMap(buffer, minIndexInclusive, maxIndexInclusive);
+            List<TElement> list = new List<TElement>(maxIndexInclusive - minIndexInclusive + 1);
+            while (minIndexInclusive <= maxIndexInclusive)
             {
-                list.Add(buffer._items[map[minIdx]]);
-                ++minIdx;
+                list.Add(buffer._items[map[minIndexInclusive]]);
+                ++minIndexInclusive;
             }
 
             return list;
         }
 
-        internal int GetCount(int minIdx, int maxIdx, bool onlyIfCheap)
+        internal int GetCount(int minIndexInclusive, int maxIndexInclusive, bool onlyIfCheap)
         {
             int count = GetCount(onlyIfCheap);
             if (count <= 0)
@@ -126,13 +126,16 @@ namespace System.Linq
                 return count;
             }
 
-            if (count <= minIdx)
+            if (count <= minIndexInclusive)
             {
                 return 0;
             }
 
-            return (count <= maxIdx ? count : maxIdx + 1) - minIdx;
+            return (count <= maxIndexInclusive ? count : maxIndexInclusive + 1) - minIndexInclusive;
         }
+
+        public IPartition<TElement> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) =>
+            this.ToPartition(startIndexInclusive, endIndexExclusive, isStartIndexFromEnd, isEndIndexFromEnd);
 
         public IPartition<TElement> Skip(int count) => new OrderedPartition<TElement>(this, count, int.MaxValue);
 
@@ -158,6 +161,42 @@ namespace System.Linq
 
             found = false;
             return default;
+        }
+
+        public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TElement element)
+        {
+            if (index == 0)
+            {
+                if (isIndexFromEnd)
+                {
+                    element = TryGetLast(out bool found);
+                    return found;
+                }
+                else
+                {
+                    element = TryGetFirst(out bool found);
+                    return found;
+                }
+            }
+
+            if (index > 0)
+            {
+                Buffer<TElement> buffer = new(_source);
+                int count = buffer._count;
+                if (isIndexFromEnd)
+                {
+                    index = count - index;
+                }
+
+                if (index >= 0 && index < count)
+                {
+                    element = GetEnumerableSorter().ElementAt(buffer._items, count, index);
+                    return true;
+                }
+            }
+
+            element = default;
+            return false;
         }
 
         public TElement? TryGetFirst(out bool found)
@@ -214,18 +253,18 @@ namespace System.Linq
             }
         }
 
-        public TElement? TryGetLast(int minIdx, int maxIdx, out bool found)
+        public TElement? TryGetLast(int minIndexInclusive, int maxIndexInclusive, out bool found)
         {
             Buffer<TElement> buffer = new Buffer<TElement>(_source);
             int count = buffer._count;
-            if (minIdx >= count)
+            if (minIndexInclusive >= count)
             {
                 found = false;
                 return default;
             }
 
             found = true;
-            return (maxIdx < count - 1) ? GetEnumerableSorter().ElementAt(buffer._items, count, maxIdx) : Last(buffer);
+            return (maxIndexInclusive < count - 1) ? GetEnumerableSorter().ElementAt(buffer._items, count, maxIndexInclusive) : Last(buffer);
         }
 
         private TElement Last(Buffer<TElement> buffer)
