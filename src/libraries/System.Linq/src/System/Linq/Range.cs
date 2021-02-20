@@ -30,31 +30,31 @@ namespace System.Linq
         [DebuggerDisplay("Count = {CountForDebugger}")]
         private sealed partial class RangeIterator : Iterator<int>
         {
-            private readonly int _start;
-            private readonly int _end;
+            private readonly int _startInclusive;
+            private readonly int _endExclusive;
 
-            public RangeIterator(int start, int count)
+            public RangeIterator(int startInclusive, int count)
             {
                 Debug.Assert(count > 0);
-                _start = start;
-                _end = unchecked(start + count);
+                _startInclusive = startInclusive;
+                _endExclusive = unchecked(startInclusive + count);
             }
 
-            private int CountForDebugger => _end - _start;
+            private int CountForDebugger => _endExclusive - _startInclusive;
 
-            public override Iterator<int> Clone() => new RangeIterator(_start, _end - _start);
+            public override Iterator<int> Clone() => new RangeIterator(_startInclusive, _endExclusive - _startInclusive);
 
             public override bool MoveNext()
             {
                 switch (_state)
                 {
                     case 1:
-                        Debug.Assert(_start != _end);
-                        _current = _start;
+                        Debug.Assert(_startInclusive != _endExclusive);
+                        _current = _startInclusive;
                         _state = 2;
                         return true;
                     case 2:
-                        if (unchecked(++_current) == _end)
+                        if (unchecked(++_current) == _endExclusive)
                         {
                             break;
                         }

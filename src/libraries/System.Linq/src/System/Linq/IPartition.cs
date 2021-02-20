@@ -15,14 +15,20 @@ namespace System.Linq
         /// </summary>
         /// <param name="count">The number of elements to skip.</param>
         /// <returns>An <see cref="IPartition{TElement}"/> with the first <paramref name="count"/> items removed.</returns>
-        IPartition<TElement> Skip(int count);
+        IPartition<TElement> Skip(int count) => Take(count, 0, false, true);
+
+        IPartition<TElement> SkipLast(int count) => Take(0, count, false, true);
+
+        IPartition<TElement> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd);
 
         /// <summary>
         /// Creates a new partition that takes the specified number of elements from this sequence.
         /// </summary>
         /// <param name="count">The number of elements to take.</param>
         /// <returns>An <see cref="IPartition{TElement}"/> with only the first <paramref name="count"/> items.</returns>
-        IPartition<TElement> Take(int count);
+        IPartition<TElement> Take(int count) => Take(0, count, false, false);
+
+        IPartition<TElement> TakeLast(int count) => Take(count, 0, true, true);
 
         /// <summary>
         /// Gets the item associated with a 0-based index in this sequence.
@@ -30,20 +36,34 @@ namespace System.Linq
         /// <param name="index">The 0-based index to access.</param>
         /// <param name="found"><c>true</c> if the sequence contains an element at that index, <c>false</c> otherwise.</param>
         /// <returns>The element if <paramref name="found"/> is <c>true</c>, otherwise, the default value of <typeparamref name="TElement"/>.</returns>
-        TElement? TryGetElementAt(int index, out bool found);
+        TElement? TryGetElementAt(int index, out bool found)
+        {
+            found = TryGetElementAt(index, false, out TElement? element);
+            return element;
+        }
+
+        bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out TElement element);
 
         /// <summary>
         /// Gets the first item in this sequence.
         /// </summary>
         /// <param name="found"><c>true</c> if the sequence contains an element, <c>false</c> otherwise.</param>
         /// <returns>The element if <paramref name="found"/> is <c>true</c>, otherwise, the default value of <typeparamref name="TElement"/>.</returns>
-        TElement? TryGetFirst(out bool found);
+        TElement? TryGetFirst(out bool found)
+        {
+            found = TryGetElementAt(0, isIndexFromEnd: false, out TElement? element);
+            return element;
+        }
 
         /// <summary>
         /// Gets the last item in this sequence.
         /// </summary>
         /// <param name="found"><c>true</c> if the sequence contains an element, <c>false</c> otherwise.</param>
         /// <returns>The element if <paramref name="found"/> is <c>true</c>, otherwise, the default value of <typeparamref name="TElement"/>.</returns>
-        TElement? TryGetLast(out bool found);
+        TElement? TryGetLast(out bool found)
+        {
+            found = TryGetElementAt(0, isIndexFromEnd: true, out TElement? element);
+            return element;
+        }
     }
 }

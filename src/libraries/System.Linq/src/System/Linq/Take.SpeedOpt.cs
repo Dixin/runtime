@@ -9,7 +9,7 @@ namespace System.Linq
     {
         private static IEnumerable<TSource> TakeIterator<TSource>(IEnumerable<TSource> source, int count) =>
             source is IPartition<TSource> partition ? partition.Take(count) :
-            source is IList<TSource> sourceList ? (IEnumerable<TSource>)new ListPartition<TSource>(sourceList, 0, count - 1) :
-            new EnumerablePartition<TSource>(source, 0, count - 1);
+            source is IList<TSource> sourceList ? sourceList.ToPartition(0, count) :
+            new EnumerablePartition<TSource>(source, 0, count);
     }
 }

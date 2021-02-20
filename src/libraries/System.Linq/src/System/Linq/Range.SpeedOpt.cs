@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Linq
 {
@@ -11,13 +12,13 @@ namespace System.Linq
         {
             public override IEnumerable<TResult> Select<TResult>(Func<int, TResult> selector)
             {
-                return new SelectRangeIterator<TResult>(_start, _end, selector);
+                return new SelectRangeIterator<TResult>(_startInclusive, _endExclusive, selector);
             }
 
             public int[] ToArray()
             {
-                int[] array = new int[_end - _start];
-                int cur = _start;
+                int[] array = new int[_endExclusive - _startInclusive];
+                int cur = _startInclusive;
                 for (int i = 0; i != array.Length; ++i)
                 {
                     array[i] = cur;
@@ -29,8 +30,8 @@ namespace System.Linq
 
             public List<int> ToList()
             {
-                List<int> list = new List<int>(_end - _start);
-                for (int cur = _start; cur != _end; cur++)
+                List<int> list = new List<int>(_endExclusive - _startInclusive);
+                for (int cur = _startInclusive; cur != _endExclusive; cur++)
                 {
                     list.Add(cur);
                 }
@@ -38,52 +39,42 @@ namespace System.Linq
                 return list;
             }
 
-            public int GetCount(bool onlyIfCheap) => unchecked(_end - _start);
+            public int GetCount(bool onlyIfCheap) => unchecked(_endExclusive - _startInclusive);
 
-            public IPartition<int> Skip(int count)
-            {
-                if (count >= _end - _start)
-                {
-                    return EmptyPartition<int>.Instance;
-                }
+            public IPartition<int> Take(int startIndexInclusive, int endIndexExclusive, bool isStartIndexFromEnd, bool isEndIndexFromEnd) =>
+                this.Take(
+                    startIndexInclusive,
+                    endIndexExclusive,
+                    isStartIndexFromEnd,
+                    isEndIndexFromEnd,
+                    (normalizedStartIndexInclusive, normalizedEndIndexExclusive) => new RangeIterator(_startInclusive + normalizedStartIndexInclusive, normalizedEndIndexExclusive - normalizedStartIndexInclusive));
 
-                return new RangeIterator(_start + count, _end - _start - count);
-            }
+            //public int TryGetElementAt(int index, out bool found)
+            //{
+            //    if (unchecked((uint)index < (uint)(_endExclusive - _startInclusive)))
+            //    {
+            //        found = true;
+            //        return _startInclusive + index;
+            //    }
 
-            public IPartition<int> Take(int count)
-            {
-                int curCount = _end - _start;
-                if (count >= curCount)
-                {
-                    return this;
-                }
+            //    found = false;
+            //    return 0;
+            //}
 
-                return new RangeIterator(_start, count);
-            }
+            public bool TryGetElementAt(int index, bool isIndexFromEnd, [MaybeNullWhen(false)] out int element) =>
+                this.TryGetElementAt(index, isIndexFromEnd, normalizedIndex => _startInclusive + normalizedIndex, out element);
 
-            public int TryGetElementAt(int index, out bool found)
-            {
-                if (unchecked((uint)index < (uint)(_end - _start)))
-                {
-                    found = true;
-                    return _start + index;
-                }
+            //public int TryGetFirst(out bool found)
+            //{
+            //    found = true;
+            //    return _startInclusive;
+            //}
 
-                found = false;
-                return 0;
-            }
-
-            public int TryGetFirst(out bool found)
-            {
-                found = true;
-                return _start;
-            }
-
-            public int TryGetLast(out bool found)
-            {
-                found = true;
-                return _end - 1;
-            }
+            //public int TryGetLast(out bool found)
+            //{
+            //    found = true;
+            //    return _endExclusive - 1;
+            //}
         }
     }
 }

@@ -4,7 +4,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Linq
 {
@@ -32,28 +31,28 @@ namespace System.Linq
             }
         }
 
-        internal IEnumerator<TElement> GetEnumerator(int minIdx, int maxIdx)
+        internal IEnumerator<TElement> GetEnumerator(int minIndexInclusive, int maxIndexInclusive)
         {
             Buffer<TElement> buffer = new Buffer<TElement>(_source);
             int count = buffer._count;
-            if (count > minIdx)
+            if (count > minIndexInclusive)
             {
-                if (count <= maxIdx)
+                if (count <= maxIndexInclusive)
                 {
-                    maxIdx = count - 1;
+                    maxIndexInclusive = count - 1;
                 }
 
-                if (minIdx == maxIdx)
+                if (minIndexInclusive == maxIndexInclusive)
                 {
-                    yield return GetEnumerableSorter().ElementAt(buffer._items, count, minIdx);
+                    yield return GetEnumerableSorter().ElementAt(buffer._items, count, minIndexInclusive);
                 }
                 else
                 {
-                    int[] map = SortedMap(buffer, minIdx, maxIdx);
-                    while (minIdx <= maxIdx)
+                    int[] map = SortedMap(buffer, minIndexInclusive, maxIndexInclusive);
+                    while (minIndexInclusive <= maxIndexInclusive)
                     {
-                        yield return buffer._items[map[minIdx]];
-                        ++minIdx;
+                        yield return buffer._items[map[minIndexInclusive]];
+                        ++minIndexInclusive;
                     }
                 }
             }
@@ -262,10 +261,10 @@ namespace System.Linq
             return map;
         }
 
-        internal int[] Sort(TElement[] elements, int count, int minIdx, int maxIdx)
+        internal int[] Sort(TElement[] elements, int count, int minIndexInclusive, int maxIndexInclusive)
         {
             int[] map = ComputeMap(elements, count);
-            PartialQuickSort(map, 0, count - 1, minIdx, maxIdx);
+            PartialQuickSort(map, 0, count - 1, minIndexInclusive, maxIndexInclusive);
             return map;
         }
 
@@ -281,7 +280,7 @@ namespace System.Linq
 
         // Sorts the k elements between minIdx and maxIdx without sorting all elements
         // Time complexity: O(n + k log k) best and average case. O(n^2) worse case.
-        protected abstract void PartialQuickSort(int[] map, int left, int right, int minIdx, int maxIdx);
+        protected abstract void PartialQuickSort(int[] map, int left, int right, int minIndexInclusive, int maxIndexInclusive);
 
         // Finds the element that would be at idx if the collection was sorted.
         // Time complexity: O(n) best and average case. O(n^2) worse case.
@@ -345,7 +344,7 @@ namespace System.Linq
 
         // Sorts the k elements between minIdx and maxIdx without sorting all elements
         // Time complexity: O(n + k log k) best and average case. O(n^2) worse case.
-        protected override void PartialQuickSort(int[] map, int left, int right, int minIdx, int maxIdx)
+        protected override void PartialQuickSort(int[] map, int left, int right, int minIndexInclusive, int maxIndexInclusive)
         {
             do
             {
@@ -381,11 +380,11 @@ namespace System.Linq
                 }
                 while (i <= j);
 
-                if (minIdx >= i)
+                if (minIndexInclusive >= i)
                 {
                     left = i + 1;
                 }
-                else if (maxIdx <= j)
+                else if (maxIndexInclusive <= j)
                 {
                     right = j - 1;
                 }
@@ -394,7 +393,7 @@ namespace System.Linq
                 {
                     if (left < j)
                     {
-                        PartialQuickSort(map, left, j, minIdx, maxIdx);
+                        PartialQuickSort(map, left, j, minIndexInclusive, maxIndexInclusive);
                     }
 
                     left = i;
@@ -403,7 +402,7 @@ namespace System.Linq
                 {
                     if (i < right)
                     {
-                        PartialQuickSort(map, i, right, minIdx, maxIdx);
+                        PartialQuickSort(map, i, right, minIndexInclusive, maxIndexInclusive);
                     }
 
                     right = j;

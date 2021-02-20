@@ -9,7 +9,7 @@ namespace System.Linq
     {
         private static IEnumerable<TSource> SkipIterator<TSource>(IEnumerable<TSource> source, int count) =>
             source is IList<TSource> sourceList ?
-                (IEnumerable<TSource>)new ListPartition<TSource>(sourceList, count, int.MaxValue) :
-                new EnumerablePartition<TSource>(source, count, -1);
+                sourceList.ToPartition(count, sourceList.Count) :
+                new EnumerablePartition<TSource>(source, count, 0, isStartIndexFromEnd: false, isEndIndexFromEnd: true);
     }
 }
